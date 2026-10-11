@@ -11,7 +11,7 @@ Briefly describe the changes made in this Pull Request.
 ## Testing Performed
 - [ ] Ran `python test_system.py` and all tests passed
 - [ ] Tested live camera feed with `python app.py`
-- [ ] Tested browser mirror with `python web_app.py`
+- [ ] Tested synthetic demo feed with `python app.py --demo`
 
 ## Checklist
 - [ ] My code follows the style guidelines of this project

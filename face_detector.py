@@ -6,7 +6,7 @@ Handles multiple face detection backends gracefully:
 3. cv2.dnn Face Detector (SSD/Caffe) if model present
 4. Pure Computer Vision Skin-Color & Geometric Face Tracker (Bulletproof Fallback)
 
-This guarantees that app.py and web_app.py NEVER crash with:
+This guarantees that app.py NEVER crashes with:
 AttributeError: module 'cv2' has no attribute 'CascadeClassifier'
 """
 

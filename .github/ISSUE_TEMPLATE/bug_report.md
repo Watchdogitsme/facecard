@@ -25,4 +25,4 @@ If applicable, add screenshots to help explain your problem.
  - OS: [e.g. Windows 11, Ubuntu 24.04 (WSL2), macOS]
  - Python Version: [e.g. 3.10, 3.11, 3.12]
  - OpenCV Version: [e.g. 4.6.0, 4.10.0]
- - Execution Mode: [Native Desktop GUI / Web Browser Mirror]
+ - Execution Mode: [Native Desktop GUI / Demo Mode / CLI]

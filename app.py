@@ -409,8 +409,7 @@ class FaceEvaluationApp:
             cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
         except cv2.error as e:
             print(f"\n[Display Error] Could not create GUI window ({e}).")
-            print("Tip: If you are running inside WSL/headless, please run the Web Mirror instead:")
-            print("     python web_app.py   (then open http://localhost:5000 in your browser)\n")
+            print("Tip: If you are running inside WSL or headless environment, ensure your X11/Wayland display server is running.\n")
             cap.release()
             return
 

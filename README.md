@@ -51,9 +51,7 @@
 
 Instead of subjective cosmetic opinions or gimmicky random percentage generators, FaceCard uses **deep learning convolutional neural networks (YuNet CNN)** to locate 5 facial landmarks, isolates pure epidermal tissue across landmark-guided zones (forehead and cheeks), calculates objective optical skin metrics (texture smoothness, blemish density, and tone uniformity out of 10), and compares 12 craniofacial geometric ratios against a verified gallery of **120 global icons** with calibrated look-alike similarity scoring.
 
-FaceCard features a **Dual-Mode Architecture**:
-1. **Native OpenCV Desktop HUD** (`app.py`): High-FPS split-screen GUI with cybernetic brackets, glowing landmark points, and real-time metric gauges.
-2. **WebRTC Browser Mirror** (`web_app.py`): Pure Python HTTP server streaming camera frames at `http://localhost:5000` — zero dependencies, fully compatible with Windows, macOS, and WSL2.
+FaceCard runs as a high-performance **Native OpenCV Desktop HUD** (`app.py`): a real-time split-screen GUI featuring cybernetic tracking brackets, glowing facial keypoint markers, calibrated skin health gauges, and instant look-alike matching with interactive keyboard controls.
 
 ---
 
@@ -132,7 +130,6 @@ CV_MINIprj/
 ├── snapshots/                       # Runtime output folder for 'S' key captures
 │   └── .gitkeep                     # Preserves directory in git
 ├── app.py                           # Main Native OpenCV Desktop GUI Application
-├── web_app.py                       # Zero-Dependency HTML5 WebRTC Browser Mirror
 ├── face_detector.py                 # Robust Face Detector & Pure YuNet ONNX Engine
 ├── skin_analyzer.py                 # Landmark-Guided Biometric Skin Analyzer
 ├── age_estimator.py                 # OpenVINO Age/Gender & Wrinkle Engine
@@ -157,7 +154,7 @@ CV_MINIprj/
 Clone the repository and install dependencies in a Python 3.8+ environment:
 
 ```bash
-git clone https://github.com/your-username/facecard.git
+git clone https://github.com/Watchdogitsme/facecard.git
 cd facecard
 pip install -r requirements.txt
 ```
@@ -169,10 +166,10 @@ pip install -r requirements.txt
 ### 2. One-Click Launchers
 
 - **Windows Users**: Double-click **`run.bat`** in Windows Explorer. Select:
-  - `[1]` for Native OpenCV Desktop App
-  - `[2]` for Browser-Based Web Mirror
-  - `[3]` for Synthetic Demo Feed
-  - `[4]` to install requirements
+  - `[1]` for Native OpenCV Desktop App (Live Laptop Webcam Window)
+  - `[2]` for Synthetic Demo Feed
+  - `[3]` to install requirements
+  - `[4]` to fix/reinstall OpenCV
 - **Linux / WSL Users**: Run the shell script:
   ```bash
   chmod +x run.sh
@@ -183,22 +180,17 @@ pip install -r requirements.txt
 
 ### 3. Manual Execution
 
-#### Option A: Native OpenCV Desktop GUI (Direct Webcam)
+Launch the native OpenCV biometric mirror:
+
 ```bash
 python app.py
 ```
+
 *Optional CLI Flags:*
 - `--camera 0`: Select camera index (default: `0`).
 - `--demo`: Launch in simulated interactive mode with synthetic face test feed.
 - `--image path/to/photo.jpg`: Analyze a static photo and save annotated snapshot.
 - `--target-prob 7.1`: Adjust base celebrity similarity calibration (default: `7.1`).
-
-#### Option B: Browser Web Mirror (Recommended for WSL2 & Remote Systems)
-If you are running inside **WSL2** where host USB webcams are not natively passed into Linux:
-```bash
-python web_app.py
-```
-Open **`http://localhost:5000`** in Google Chrome or Microsoft Edge. Your browser handles webcam streaming via HTML5 WebRTC and delivers live frames to the OpenCV processing engine.
 
 ---
 
