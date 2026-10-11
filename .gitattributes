@@ -1,0 +1,21 @@
+# Auto detect text files and perform LF normalization
+* text=auto eol=lf
+
+# Windows scripts use CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Linux/Bash scripts use LF
+*.sh text eol=lf
+
+# Binary files
+*.onnx binary
+*.npz binary
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.gif binary
+*.ico binary
+*.docx binary
+*.pdf binary
+*.xml text eol=lf
