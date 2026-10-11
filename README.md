@@ -41,7 +41,6 @@
   - [12-Dimensional Anthropometric Matching](#4-12-dimensional-anthropometric-matching)
 - [Self-Test Verification](#-self-test-verification)
 - [Documentation & Reports](#-documentation--reports)
-- [Contributing](#-contributing)
 - [License](#-license)
 
 ---
