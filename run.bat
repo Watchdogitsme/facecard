@@ -12,8 +12,9 @@ echo [2] Launch Browser-Based Web Mirror (http://localhost:5000)
 echo [3] Run Demo Mode (Synthesized Camera Test Feed)
 echo [4] Install / Verify Requirements (pip install -r requirements.txt)
 echo [5] Fix / Reinstall OpenCV (Fixes 'module cv2 has no attribute CascadeClassifier')
+echo [6] Push to GitHub (git push -u origin main)
 echo.
-set /p mode="Enter choice (1/2/3/4/5) [Default 1]: "
+set /p mode="Enter choice (1/2/3/4/5/6) [Default 1]: "
 
 if "%mode%"=="" set mode=1
 
@@ -36,6 +37,10 @@ if "%mode%"=="1" (
     pip uninstall cv2 opencv-python opencv-python-headless opencv-contrib-python -y
     pip install opencv-python
     echo Done! You can now run option 1.
+    pause
+) else if "%mode%"=="6" (
+    echo Pushing commits to https://github.com/Watchdogitsme/facecard.git ...
+    git push -u origin main
     pause
 ) else (
     echo Invalid choice. Starting native OpenCV camera app...
