@@ -14,14 +14,6 @@
   <b>An end-to-end Computer Vision biometric mirror that quantifies skin health, classifies age & demographics, and maps 12 craniofacial geometric proportions to a 120-celebrity gallery in real time.</b>
 </p>
 
----
-
-<img src="assets/dashboard_preview.jpg" alt="FaceCard Live Execution HUD Dashboard" width="900" style="border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.4);" />
-
-*Figure 1: FaceCard Live Execution HUD — Tracking facial landmarks, evaluating skin quality metrics, estimating biological age, and locking onto an anthropometric look-alike match.*
-
----
-
 </div>
 
 ## 📑 Table of Contents
@@ -105,13 +97,9 @@ CV_MINIprj/
 │   │   ├── bug_report.md            # Bug report issue template
 │   │   └── feature_request.md       # Feature request issue template
 │   └── pull_request_template.md     # PR submission template
-├── assets/                          # README badges and visual previews
-│   └── dashboard_preview.jpg        # High-resolution HUD snapshot
 ├── docs/                            # Project documentation & reports
 │   ├── facecard.docx                # Complete Microsoft Word technical report
-│   ├── FaceCard_Project_Report.docx # Formatted academic-grade documentation
-│   └── images/
-│       └── dashboard_preview.jpg    # Documentation figures
+│   └── FaceCard_Project_Report.docx # Formatted academic-grade documentation
 ├── models/                          # Deep learning weights & XML cascades
 │   ├── age-gender-recognition-retail-0013.onnx  (8.5 MB OpenVINO model)
 │   ├── face_detection_yunet_2023mar.onnx        (232 KB YuNet CNN)
