@@ -288,22 +288,10 @@ python test_system.py
 
 ## 📑 Documentation & Reports
 
-Complete academic and engineering documentation is provided in the **`docs/`** directory:
-
-- **[FaceCard Word Technical Report (`docs/facecard.docx`)](docs/facecard.docx)**: Comprehensive 105-paragraph document covering project abstract, problem statement, mathematical derivations, architecture tables, verification benchmarks, limitations, and future research directions.
 - **[FaceCard Project Report (`docs/FaceCard_Project_Report.docx`)](docs/FaceCard_Project_Report.docx)**: Formatted project submission report.
 
 ---
 
-## 🤝 Contributing
-
-Contributions are welcome! Please follow these steps:
-1. Fork the repository.
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`).
-3. Commit your changes (`git commit -m 'Add AmazingFeature'`).
-4. Ensure all tests pass (`python test_system.py`).
-5. Push to the branch (`git push origin feature/AmazingFeature`).
-6. Open a Pull Request using our [PR Template](.github/pull_request_template.md).
 
 ---
 
