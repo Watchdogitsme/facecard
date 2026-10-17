@@ -1,13 +1,11 @@
 """
-Unified Robust Face Detector Module
-Handles multiple face detection backends gracefully:
-1. cv2.CascadeClassifier (Haar Cascade) with multi-namespace resolution
-2. cv2.FaceDetectorYN (YuNet DNN) if supported and model present
-3. cv2.dnn Face Detector (SSD/Caffe) if model present
-4. Pure Computer Vision Skin-Color & Geometric Face Tracker (Bulletproof Fallback)
-
-This guarantees that app.py NEVER crashes with:
-AttributeError: module 'cv2' has no attribute 'CascadeClassifier'
+Unified Robust Face Detector, 5-Point Affine Face Aligner & SFace Deep Embedding Engine
+Handles multiple face detection and recognition backends gracefully:
+1. PureYuNetDetector (YuNet ONNX DNN) for high-precision 2D boxes + 5 facial landmarks
+2. 5-Point Similarity Affine Alignment (ArcFace / SFace standard 112x112 canonical warp)
+3. PureSFaceRecognizer (SFace 128-D Deep Face Embeddings via FaceRecognizerSF or cv2.dnn)
+4. cv2.CascadeClassifier (Haar Cascade) with multi-namespace resolution
+5. Pure Computer Vision Skin-Color & Geometric Face Tracker (Bulletproof Fallback)
 """
 
 import os
@@ -15,17 +13,59 @@ import cv2
 import numpy as np
 
 
+# Canonical 5-point landmarks for 112x112 aligned faces (ArcFace / SFace standard)
+REFERENCE_FACIAL_POINTS_112 = np.array([
+    [38.2946, 51.6963],  # Right eye (viewer's left)
+    [73.5318, 51.5014],  # Left eye (viewer's right)
+    [56.0252, 71.7366],  # Nose tip
+    [41.5493, 92.3655],  # Right mouth corner
+    [70.7299, 92.2041],  # Left mouth corner
+], dtype=np.float32)
+
+
+def align_face(image, landmarks=None, output_size=(112, 112)):
+    """
+    Warps a face image to a canonical upright coordinate frame using a 5-point
+    similarity transform (rotation, scale, translation).
+    Eliminates head tilt, scale variation, and translation jitter before DNN inference.
+    """
+    if image is None or image.size == 0:
+        return np.zeros((output_size[1], output_size[0], 3), dtype=np.uint8)
+
+    out_w, out_h = int(output_size[0]), int(output_size[1])
+    if landmarks is not None:
+        try:
+            src_pts = np.asarray(landmarks, dtype=np.float32).reshape(-1, 2)
+            if src_pts.shape[0] == 5:
+                dst_pts = REFERENCE_FACIAL_POINTS_112.copy()
+                if out_w != 112 or out_h != 112:
+                    dst_pts[:, 0] *= (out_w / 112.0)
+                    dst_pts[:, 1] *= (out_h / 112.0)
+
+                M, _ = cv2.estimateAffinePartial2D(src_pts, dst_pts, method=cv2.LMEDS)
+                if M is not None:
+                    aligned = cv2.warpAffine(
+                        image,
+                        M,
+                        (out_w, out_h),
+                        flags=cv2.INTER_LINEAR,
+                        borderMode=cv2.BORDER_REPLICATE
+                    )
+                    return aligned
+        except Exception:
+            pass
+
+    return cv2.resize(image, (out_w, out_h), interpolation=cv2.INTER_AREA)
+
+
 def get_cascade_classifier_class():
     """Safely retrieves CascadeClassifier class from cv2 regardless of build/namespace."""
-    # Standard cv2.CascadeClassifier
     if hasattr(cv2, "CascadeClassifier"):
         return cv2.CascadeClassifier
 
-    # Nested cv2.cv2 (older/certain Windows wheel builds)
     if hasattr(cv2, "cv2") and hasattr(cv2.cv2, "CascadeClassifier"):
         return cv2.cv2.CascadeClassifier
 
-    # Submodule cv2.objdetect
     try:
         import cv2.objdetect as objdetect
         if hasattr(objdetect, "CascadeClassifier"):
@@ -57,7 +97,6 @@ def find_cascade_file():
         if os.path.exists(p):
             return p
 
-    # Download from OpenCV repo if missing
     try:
         import urllib.request
         local_path = os.path.join(os.path.dirname(__file__), "models", "haarcascade_frontalface_default.xml")
@@ -73,6 +112,93 @@ def find_cascade_file():
         pass
 
     return None
+
+
+class PureSFaceRecognizer:
+    """
+    128-D Deep Face Recognition Embedding Engine powered by OpenCV Zoo's SFace ONNX model.
+    Supports both cv2.FaceRecognizerSF and pure cv2.dnn.readNet + 5-point affine alignment.
+    """
+
+    def __init__(self, model_path=None):
+        self.model_path = model_path or self._find_model()
+        self.sf_recognizer = None
+        self.dnn_net = None
+        self.available = False
+
+        if self.model_path and os.path.exists(self.model_path):
+            # 1. Try native cv2.FaceRecognizerSF if available
+            if hasattr(cv2, "FaceRecognizerSF"):
+                try:
+                    self.sf_recognizer = cv2.FaceRecognizerSF.create(self.model_path, "")
+                    self.available = True
+                except Exception:
+                    self.sf_recognizer = None
+
+            # 2. Also load cv2.dnn.readNet for direct aligned crop inference
+            try:
+                self.dnn_net = cv2.dnn.readNet(self.model_path)
+                self.available = True
+            except Exception:
+                self.dnn_net = None
+
+    @staticmethod
+    def _find_model():
+        candidates = [
+            os.path.join(os.path.dirname(__file__), "models", "face_recognition_sface_2021dec.onnx"),
+            os.path.join(os.path.dirname(__file__), "..", "CV_Mini project", "models", "face_recognition_sface_2021dec.onnx"),
+        ]
+        for c in candidates:
+            if os.path.exists(c) and os.path.getsize(c) > 100 * 1024:
+                return c
+        return None
+
+    def extract_embedding(self, image, landmarks=None, raw_row=None):
+        """
+        Extracts an L2-normalized 128-D deep facial identity embedding.
+        Uses 5-point affine alignment for pose invariance.
+        """
+        if not self.available or image is None or image.size == 0:
+            return None
+
+        # Option A: Use FaceRecognizerSF.alignCrop if full image + raw_row (15 floats) provided
+        if self.sf_recognizer is not None and raw_row is not None:
+            try:
+                face_row = np.asarray(raw_row, dtype=np.float32).reshape(1, -1)
+                aligned = self.sf_recognizer.alignCrop(image, face_row)
+                feat = self.sf_recognizer.feature(aligned)
+                feat = feat.flatten().astype(np.float32)
+                norm = float(np.linalg.norm(feat))
+                if norm > 1e-6:
+                    return feat / norm
+            except Exception:
+                pass
+
+        # Option B: Align via 5-point similarity transform to 112x112
+        aligned_112 = align_face(image, landmarks, output_size=(112, 112))
+
+        if self.sf_recognizer is not None:
+            try:
+                feat = self.sf_recognizer.feature(aligned_112)
+                feat = feat.flatten().astype(np.float32)
+                norm = float(np.linalg.norm(feat))
+                if norm > 1e-6:
+                    return feat / norm
+            except Exception:
+                pass
+
+        if self.dnn_net is not None:
+            try:
+                blob = cv2.dnn.blobFromImage(aligned_112, 1.0, (112, 112), (0, 0, 0), swapRB=True)
+                self.dnn_net.setInput(blob)
+                feat = self.dnn_net.forward().flatten().astype(np.float32)
+                norm = float(np.linalg.norm(feat))
+                if norm > 1e-6:
+                    return feat / norm
+            except Exception:
+                pass
+
+        return None
 
 
 class PureYuNetDetector:
@@ -153,7 +279,6 @@ class PureYuNetDetector:
             bw = np.exp(raw_bbox[:, 2]) * s
             bh = np.exp(raw_bbox[:, 3]) * s
 
-            # Rescale back to original unscaled frame
             bx = (cx - bw * 0.5) / scale
             by = (cy - bh * 0.5) / scale
             bw = bw / scale
@@ -196,7 +321,6 @@ class PureYuNetDetector:
                 "raw_row": [float(bx), float(by), float(bw), float(bh)] + landmarks[i] + [float(scores[i])]
             })
 
-        # Sort by bounding box area descending
         results.sort(key=lambda r: r["box"][2] * r["box"][3], reverse=True)
         return results
 
@@ -204,15 +328,17 @@ class PureYuNetDetector:
 class RobustFaceDetector:
     """
     Unified face detector supporting high-accuracy YuNet DNN, Haar Cascade,
-    and Color/Contour fallback.
+    and Color/Contour fallback, plus temporal bounding-box & landmark smoothing.
     """
 
     def __init__(self):
         self.backend = "unknown"
         self.cascade = None
         self.yunet = None
+        self._prev_box = None
+        self._prev_landmarks = None
 
-        # 1. Prioritize YuNet DNN (state-of-the-art CNN face and landmark detection)
+        # 1. Prioritize YuNet DNN
         yunet_candidates = [
             os.path.join(os.path.dirname(__file__), "models", "face_detection_yunet_2023mar.onnx"),
             os.path.join(os.path.dirname(__file__), "..", "CV_Mini project", "models", "face_detection_yunet_2023mar.onnx")
@@ -221,7 +347,6 @@ class RobustFaceDetector:
             if os.path.exists(yp):
                 try:
                     detector = PureYuNetDetector(yp, score_threshold=0.55, nms_threshold=0.30)
-                    # Warm-up / validation test
                     test_img = np.zeros((64, 64, 3), dtype=np.uint8)
                     detector.detect(test_img)
                     self.yunet = detector
@@ -231,7 +356,7 @@ class RobustFaceDetector:
                 except Exception as e:
                     print(f"[FaceDetector] YuNet init note: {e}")
 
-        # 2. Fallback to Haar Cascade if YuNet is unavailable
+        # 2. Fallback to Haar Cascade
         if self.backend == "unknown":
             cascade_cls = get_cascade_classifier_class()
             if cascade_cls is not None:
@@ -262,13 +387,7 @@ class RobustFaceDetector:
     def detect_faces_detailed(self, frame, scale_factor=1.12, min_neighbors=5, min_size=(70, 70)):
         """
         Detects faces and extracts facial landmark geometry when supported.
-        Returns list of dicts:
-        [{
-            'box': (x, y, w, h),
-            'landmarks': np.ndarray(shape=(5, 2)),
-            'score': float,
-            'raw_row': list[float]
-        }, ...]
+        Returns list of dicts with box, 5 landmarks, score, and raw_row.
         """
         if frame is None or frame.size == 0:
             return []
@@ -347,7 +466,6 @@ class RobustFaceDetector:
         Fallback detector using skin chrominance segmentation and
         morphological aspect ratio filtering.
         """
-        h, w = frame.shape[:2]
         ycrcb = cv2.cvtColor(frame, cv2.COLOR_BGR2YCrCb)
         mask = cv2.inRange(ycrcb, np.array([0, 133, 77]), np.array([255, 173, 127]))
 

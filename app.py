@@ -6,7 +6,7 @@ Features:
 - Live face detection with sleek biometric brackets
 - Skin quality rating (Smoothness, Tone Uniformity, Blemish Clarity) out of 10
 - Age estimation based on facial wrinkles, micro-texture, and geometry
-- Celebrity look-alike portrait display with match probability calibrated around 7/10
+- Celebrity look-alike portrait display with deep + biometric matching
 - Side-by-side futuristic HUD dashboard
 - Interactive keyboard shortcuts (Q to quit, S to snapshot, C to cycle celeb, M for mask mode)
 """
@@ -26,18 +26,15 @@ from face_detector import RobustFaceDetector
 
 def find_cascade_path():
     """Locates or downloads haarcascade_frontalface_default.xml across platforms."""
-    # Check cv2.data (standard on Windows / macOS / pip opencv-python)
     if hasattr(cv2, "data") and hasattr(cv2.data, "haarcascades"):
         pip_path = os.path.join(cv2.data.haarcascades, "haarcascade_frontalface_default.xml")
         if os.path.exists(pip_path):
             return pip_path
 
-    # Local project model directory
     local_path = os.path.join(os.path.dirname(__file__), "models", "haarcascade_frontalface_default.xml")
     if os.path.exists(local_path):
         return local_path
 
-    # Standard Linux / Ubuntu paths
     linux_paths = [
         "/usr/share/opencv4/haarcascades/haarcascade_frontalface_default.xml",
         "/usr/share/opencv/haarcascades/haarcascade_frontalface_default.xml",
@@ -47,7 +44,6 @@ def find_cascade_path():
         if os.path.exists(lp):
             return lp
 
-    # Auto-download from official OpenCV repository if missing
     import urllib.request
     models_dir = os.path.join(os.path.dirname(__file__), "models")
     try:
@@ -95,7 +91,7 @@ def draw_progress_bar(panel, x, y, width, height, value, max_val, fg_color, bg_c
 
 
 class FaceEvaluationApp:
-    def __init__(self, camera_index=0, width=640, height=480, target_prob=7.1):
+    def __init__(self, camera_index=0, width=640, height=480, target_prob=7.1, indian_only=False):
         self.camera_index = camera_index
         self.cam_w = width
         self.cam_h = height
@@ -107,6 +103,7 @@ class FaceEvaluationApp:
         self.skin_analyzer = SkinAnalyzer()
         self.age_estimator = AgeEstimator()
         self.celeb_matcher = CelebrityMatcher(target_probability=target_prob)
+        self.celeb_matcher.indian_only = indian_only
 
         # Robust Face Detection Engine (Haar / YuNet / Color-Contour Fallback)
         self.face_detector = RobustFaceDetector()
@@ -138,7 +135,7 @@ class FaceEvaluationApp:
         cv2.putText(panel, "★ TOP LOOK-ALIKE (12 CHECKS)", (20, y_sec1 + 14),
                     cv2.FONT_HERSHEY_DUPLEX, 0.46, (100, 200, 255), 1, cv2.LINE_AA)
 
-        # Category Badge (YOUTUBER / INFLUENCER / HOLLYWOOD / POP STAR)
+        # Category Badge (ACTOR / YOUTUBER / INFLUENCER / POP STAR / ATHLETE)
         category_tag = celeb_dict.get('category', 'TOP MATCH')
         cv2.rectangle(panel, (self.side_w - 130, y_sec1), (self.side_w - 20, y_sec1 + 18), (35, 42, 55), -1)
         cv2.rectangle(panel, (self.side_w - 130, y_sec1), (self.side_w - 20, y_sec1 + 18), (80, 150, 240), 1)
@@ -165,7 +162,7 @@ class FaceEvaluationApp:
         cv2.putText(panel, celeb_dict.get('title', 'Top Match'), (text_x, photo_y + 38),
                     cv2.FONT_HERSHEY_PLAIN, 0.85, (160, 175, 195), 1, cv2.LINE_AA)
 
-        # Match Probability Display (Centered around 7/10 as requested)
+        # Match Probability Display
         prob_str = f"{celeb_prob:.1f} / 10"
         percent_str = f"({int(celeb_prob * 10)}% Match)"
         cv2.putText(panel, f"Score: {prob_str}", (text_x, photo_y + 68),
@@ -276,31 +273,34 @@ class FaceEvaluationApp:
         # High-Accuracy Face & Landmark Detection
         detailed_faces = self.face_detector.detect_faces_detailed(frame, scale_factor=1.12, min_neighbors=5, min_size=(70, 70))
         has_face = len(detailed_faces) > 0
-        primary_face = None
 
         if has_face:
-            # Pick largest primary face
             primary_face = max(detailed_faces, key=lambda d: d["box"][2] * d["box"][3])
             fx, fy, fw, fh = primary_face["box"]
             landmarks = primary_face.get("landmarks")
             self.last_face_time = time.time()
 
-            # Ensure valid bounds
             fx1, fy1 = max(0, fx), max(0, fy)
             fx2, fy2 = min(frame.shape[1], fx + fw), min(frame.shape[0], fy + fh)
             face_crop = frame[fy1:fy2, fx1:fx2]
 
-            # Relative landmarks in crop coordinates
             crop_landmarks = None
             if landmarks is not None:
                 crop_landmarks = landmarks.copy()
                 crop_landmarks[:, 0] -= fx1
                 crop_landmarks[:, 1] -= fy1
 
+            # Extract 128-D SFace Deep Identity Embedding on 5-point aligned face
+            deep_embedding = self.celeb_matcher.extract_deep_embedding(face_crop, landmarks=crop_landmarks)
+
             # Run Biometric AI Engines
             skin_report = self.skin_analyzer.evaluate_face(face_crop, landmarks=crop_landmarks)
             age_report = self.age_estimator.estimate(face_crop)
-            celeb_dict, celeb_prob, celeb_img, top_traits = self.celeb_matcher.match(face_crop, landmarks=crop_landmarks)
+            celeb_dict, celeb_prob, celeb_img, top_traits = self.celeb_matcher.match(
+                face_crop,
+                landmarks=crop_landmarks,
+                query_embedding=deep_embedding
+            )
 
             self.cached_analysis = (celeb_dict, celeb_prob, celeb_img, skin_report, age_report, top_traits)
 
@@ -326,7 +326,7 @@ class FaceEvaluationApp:
             if self.show_mask_mode:
                 mask = self.skin_analyzer.segment_skin(face_crop)
                 mask_bgr = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
-                mask_bgr[:, :, 1] = np.clip(mask_bgr[:, :, 1] * 1.5, 0, 255).astype(np.uint8)  # Tint green
+                mask_bgr[:, :, 1] = np.clip(mask_bgr[:, :, 1] * 1.5, 0, 255).astype(np.uint8)
                 vis_frame[fy1:fy2, fx1:fx2] = cv2.addWeighted(face_crop, 0.5, mask_bgr, 0.5, 0)
 
             # Face label tag
@@ -334,16 +334,12 @@ class FaceEvaluationApp:
                         (fx, max(25, fy - 10)), cv2.FONT_HERSHEY_DUPLEX, 0.48, (255, 255, 255), 1, cv2.LINE_AA)
 
         else:
-            # Fallback to cached analysis if face momentarily lost
             if self.cached_analysis is None:
                 default_skin = self.skin_analyzer._default_result()
                 default_age = {'estimated_age': 24, 'age_range': '22 - 26 yrs', 'descriptor': 'Analyzing...', 'wrinkle_level': 'Normal'}
                 celeb_dict, celeb_prob, celeb_img, top_traits = self.celeb_matcher.match(None)
                 self.cached_analysis = (celeb_dict, celeb_prob, celeb_img, default_skin, default_age, top_traits)
 
-            celeb_dict, celeb_prob, celeb_img, skin_report, age_report, top_traits = self.cached_analysis
-
-            # No face banner
             cv2.putText(vis_frame, "Looking for face... Please look at camera",
                         (40, self.cam_h // 2), cv2.FONT_HERSHEY_DUPLEX, 0.65, (0, 200, 255), 1, cv2.LINE_AA)
 
@@ -444,7 +440,7 @@ class FaceEvaluationApp:
 
                 # Key handling
                 key = cv2.waitKey(1) & 0xFF
-                if key in [ord('q'), ord('Q'), 27]:  # ESC or Q
+                if key in [ord('q'), ord('Q'), 27]:
                     break
                 elif key in [ord('s'), ord('S')]:
                     self.save_snapshot(dashboard)
@@ -454,7 +450,7 @@ class FaceEvaluationApp:
                 elif key in [ord('m'), ord('M')]:
                     self.show_mask_mode = not self.show_mask_mode
                     print(f"[Skin] Mask visualization mode: {'ON' if self.show_mask_mode else 'OFF'}")
-                elif key == 32:  # Spacebar
+                elif key == 32:
                     self.paused = not self.paused
 
         finally:
@@ -482,7 +478,6 @@ class FaceEvaluationApp:
             while True:
                 frame = base_frame.copy()
 
-                # Add tiny natural light pulse so demo looks alive
                 pulse = np.sin(time.time() * 2.0) * 8
                 frame = np.clip(frame.astype(np.float32) + pulse, 0, 255).astype(np.uint8)
 
@@ -517,35 +512,28 @@ class FaceEvaluationApp:
         """Generates a realistic test face pattern for headless or test validation."""
         h, w = self.cam_h, self.cam_w
         canvas = np.zeros((h, w, 3), dtype=np.uint8)
-        canvas[:] = (35, 40, 48)  # Studio background
+        canvas[:] = (35, 40, 48)
 
-        # Face center & dimensions
         cx, cy = w // 2, h // 2
         rx, ry = 95, 125
 
-        # Skin tone (warm radiant tone)
-        skin_bgr = (175, 195, 235)  # B, G, R
+        skin_bgr = (175, 195, 235)
         cv2.ellipse(canvas, (cx, cy), (rx, ry), 0, 0, 360, skin_bgr, -1, cv2.LINE_AA)
 
-        # Hair
         cv2.ellipse(canvas, (cx, cy - 40), (rx + 10, ry - 35), 0, 180, 360, (25, 30, 45), -1, cv2.LINE_AA)
 
-        # Eyes
         eye_y = cy - 20
         cv2.ellipse(canvas, (cx - 38, eye_y), (14, 8), 0, 0, 360, (245, 245, 245), -1, cv2.LINE_AA)
         cv2.circle(canvas, (cx - 38, eye_y), 5, (70, 45, 30), -1, cv2.LINE_AA)
         cv2.ellipse(canvas, (cx + 38, eye_y), (14, 8), 0, 0, 360, (245, 245, 245), -1, cv2.LINE_AA)
         cv2.circle(canvas, (cx + 38, eye_y), 5, (70, 45, 30), -1, cv2.LINE_AA)
 
-        # Eyebrows
         cv2.ellipse(canvas, (cx - 38, eye_y - 12), (18, 5), 10, 180, 360, (40, 45, 55), 2, cv2.LINE_AA)
         cv2.ellipse(canvas, (cx + 38, eye_y - 12), (18, 5), -10, 180, 360, (40, 45, 55), 2, cv2.LINE_AA)
 
-        # Nose bridge
         cv2.line(canvas, (cx, cy - 10), (cx, cy + 22), (150, 170, 210), 2, cv2.LINE_AA)
         cv2.ellipse(canvas, (cx, cy + 22), (10, 4), 0, 0, 180, (140, 160, 200), -1, cv2.LINE_AA)
 
-        # Lips
         cv2.ellipse(canvas, (cx, cy + 55), (24, 8), 0, 0, 360, (110, 115, 195), -1, cv2.LINE_AA)
 
         return canvas
@@ -556,10 +544,11 @@ def main():
     parser.add_argument("--camera", type=int, default=0, help="Camera index (default: 0)")
     parser.add_argument("--demo", action="store_true", help="Run with simulated test feed")
     parser.add_argument("--image", type=str, default=None, help="Process a single test image file")
+    parser.add_argument("--indian-only", action="store_true", help="Filter to Indian celebrities & influencers")
     parser.add_argument("--target-prob", type=float, default=7.1, help="Target celebrity match score /10 (default: 7.1)")
     args = parser.parse_args()
 
-    app = FaceEvaluationApp(camera_index=args.camera, target_prob=args.target_prob)
+    app = FaceEvaluationApp(camera_index=args.camera, target_prob=args.target_prob, indian_only=args.indian_only)
 
     if args.image:
         print(f"[FaceEvaluationApp] Processing static image: {args.image}")

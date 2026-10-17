@@ -171,7 +171,7 @@ class AgeEstimator:
         scalar_age = bin_midpoints[idx]
         return scalar_age, age_bin
 
-    def estimate(self, face_bgr):
+    def estimate(self, face_bgr, *args, **kwargs):
         """
         Main entry point for age estimation.
         Returns estimated age, range, gender, and vitality description.
